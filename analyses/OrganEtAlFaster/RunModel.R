@@ -1,13 +1,8 @@
 library(TreEvo)
-source("/Users/bomeara/Documents/MyDocuments/GitClones/treevo_fossils/data/OrganEtAl/ProcessOrganData.R")
 
-changingRateIntrinsic <-function(params, states, timefrompresent) {
-  #params[1] is sd at present,
-  #params[2] is multiplier for parabolic change
-  #overall model is sd_now = params[1] * (1 + params[2]*(timefrompresent)^2)
-  newdisplacement <- rnorm(n=length(states), mean=0, sd=params[1] * (1 + params[2]*(timefrompresent^2)))
-  return(newdisplacement)
-}
+options(warn=1)
+options(error = utils::recover)
+source("/Users/bomeara/Documents/MyDocuments/GitClones/treevo_fossils/data/OrganEtAl/ProcessOrganData.R")
 
 
 #assume generation time of 20 years. Tree is in MY time units.
@@ -18,20 +13,16 @@ timeStep<-generation.time/TreeYears
 continuous.rate.guess <- geiger::fitContinuous(phy, trait)$opt$sigsq #units are variance / MY
 sd.per.gen.guess <- sd(rnorm(1e5,0,sqrt(continuous.rate.guess*timeStep)))
 
-max.time.squared <- max(phytools::nodeHeights(phy))^2
 
-#Assume rate at beginning is not too much greater / less than rate at end: say two standard dev include 10fold diff
 
-sd.param2 <- (c(10,-10)/2)/max.time.squared
-
-intrinsicFn=changingRateIntrinsic
+intrinsicFn=boundaryMinIntrinsic
 extrinsicFn=nullExtrinsic
 startingPriorsFns=c("uniform")
 startingPriorsValues=matrix(range(trait),nrow=2,byrow=FALSE) #assume that the min value is the root state
 intrinsicPriorsFns=c("exponential","uniform") 
 intrinsicPriorsValues=matrix(c(
   rep(1/sd.per.gen.guess , 2),
-  sd.param2), nrow=2, byrow=FALSE)
+  c(0, min(trait))), nrow=2, byrow=FALSE)
 extrinsicPriorsFns=c("fixed")
 extrinsicPriorsValues=matrix(c(0, 0), nrow=2, byrow=FALSE)
 

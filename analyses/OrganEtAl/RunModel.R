@@ -4,7 +4,7 @@ changingRateIntrinsic <-function(params, states, timefrompresent) {
   #params[1] is sd at present,
   #params[2] is multiplier for parabolic change
   #overall model is sd_now = params[1] * (1 + params[2]*(timefrompresent)^2)
-  newdisplacement <- rnorm(n=length(states), mean=0, sd=prams[1] * (1 + params[2]*(timefrompresent^2)))
+  newdisplacement <- rnorm(n=length(states), mean=0, sd=params[1] * (1 + params[2]*(timefrompresent^2)))
   return(newdisplacement)
 }
 
@@ -24,21 +24,20 @@ sd.param2 <- (c(10,-10)/2)/max.time.squared
 
 intrinsicFn=changingRateIntrinsic
 extrinsicFn=nullExtrinsic
-startingPriorsFns="uniform"
+startingPriorsFns=c("uniform")
 startingPriorsValues=matrix(range(trait),nrow=2,byrow=FALSE) #assume that the min value is the root state
 intrinsicPriorsFns=c("exponential","normal") #do fixed for param2 b/c dont have a lot of data to use
 intrinsicPriorsValues=matrix(c(
   rep(1/sd.per.gen.guess , 2),
-  0, 0 ,
   sd.param2), nrow=2, byrow=FALSE)
-extrinsicPriorsFns="fixed"
+extrinsicPriorsFns=c("fixed")
 extrinsicPriorsValues=matrix(c(0, 0), nrow=2, byrow=FALSE)
 
 abcTolerance<-0.01
 
 results <- doRun_prc(
   phy = phy,
-  traits = traits,
+  traits = trait,
   intrinsicFn=intrinsicFn,
   extrinsicFn=extrinsicFn,
   startingPriorsFns=startingPriorsFns,
