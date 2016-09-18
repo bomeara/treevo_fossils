@@ -1,0 +1,188 @@
+library(TreEvo)
+source("/Users/bomeara/Documents/MyDocuments/GitClones/treevo_fossils/data/OrganEtAl/ProcessOrganData.R")
+
+changingRateIntrinsic <-function(params, states, timefrompresent) {
+  #params[1] is sd at present,
+  #params[2] is multiplier for parabolic change
+  #overall model is sd_now = params[1] * (1 + params[2]*(timefrompresent)^2)
+  newdisplacement <- rnorm(n=length(states), mean=0, sd=params[1] * (1 + params[2]*(timefrompresent^2)))
+  return(newdisplacement)
+}
+
+
+#assume generation time of 20 years. Tree is in MY time units.
+TreeYears=1e6
+generation.time=100000
+#timeStep<-1000/TreeYears
+timeStep<-generation.time/TreeYears
+continuous.rate.guess <- geiger::fitContinuous(phy, trait)$opt$sigsq #units are variance / MY
+sd.per.gen.guess <- sd(rnorm(1e5,0,sqrt(continuous.rate.guess*timeStep)))
+
+max.time.squared <- max(phytools::nodeHeights(phy))^2
+
+#Assume rate at beginning is not too much greater / less than rate at end: say two standard dev include 10fold diff
+
+sd.param2 <- (c(10,-10)/2)/max.time.squared
+
+intrinsicFn=changingRateIntrinsic
+extrinsicFn=nullExtrinsic
+startingPriorsFns=c("uniform")
+startingPriorsValues=matrix(range(trait),nrow=2,byrow=FALSE) #assume that the min value is the root state
+intrinsicPriorsFns=c("exponential","uniform") 
+intrinsicPriorsValues=matrix(c(
+  rep(1/sd.per.gen.guess , 2),
+  sd.param2), nrow=2, byrow=FALSE)
+extrinsicPriorsFns=c("fixed")
+extrinsicPriorsValues=matrix(c(0, 0), nrow=2, byrow=FALSE)
+
+abcTolerance<-0.01
+
+
+#dealing with zero length branches
+phy$edge.length[which(phy$edge.length<0.01)] <- 0.01 
+
+#for debugging
+if(TRUE) {
+		traits <- trait
+				
+		timeStep<-generation.time/TreeYears
+		
+		#splits<-getSimulationSplits(phy) #initialize this info
+		taxon.df <- getTaxonDFWithPossibleExtinction(phy)
+		
+		#figure out number of free params
+		numberParametersTotal<-dim(startingPriorsValues)[2] +  dim(intrinsicPriorsValues)[2] + dim(extrinsicPriorsValues)[2]
+		numberParametersFree<-numberParametersTotal
+		numberParametersStarting<-0
+		numberParametersIntrinsic<-0
+		numberParametersExtrinsic<-0
+		freevariables<-matrix(data=NA, nrow=2, ncol=0)
+		titlevector<-c()
+		freevector<-c()
+		
+		#create PriorMatrix
+		namesForPriorMatrix<-c()
+		PriorMatrix<-matrix(c(startingPriorsFns, intrinsicPriorsFns, extrinsicPriorsFns), nrow=1, ncol=numberParametersTotal)
+		for (a in 1:dim(startingPriorsValues)[2]) {
+			namesForPriorMatrix<-c(paste("StartingStates", a, sep=""))
+		}
+		for (b in 1:dim(intrinsicPriorsValues)[2]) {
+			namesForPriorMatrix<-append(namesForPriorMatrix, paste("IntrinsicValue", b, sep=""))
+		}
+		#print(extrinsicPriorsValues)
+		for (c in 1:dim(extrinsicPriorsValues)[2]) {
+			namesForPriorMatrix <-append(namesForPriorMatrix, paste("ExtrinsicValue", c, sep=""))
+		}
+		PriorMatrix<-rbind(PriorMatrix, cbind(startingPriorsValues, intrinsicPriorsValues, extrinsicPriorsValues))
+		colnames(PriorMatrix)<-namesForPriorMatrix
+		rownames(PriorMatrix)<-c("shape", "value1", "value2")
+		
+		#Calculate freevector
+		for (i in 1:dim(startingPriorsValues)[2]) {
+			priorFn<-match.arg(arg=startingPriorsFns[i],choices=c("fixed", "uniform", "normal", "lognormal", "gamma", "exponential"),several.ok=FALSE)
+			if (priorFn=="fixed") {
+				numberParametersFree<-numberParametersFree-1
+				freevector<-c(freevector, FALSE)
+			}
+			else {
+				numberParametersStarting<-numberParametersStarting+1
+				freevariables<-cbind(freevariables, startingPriorsValues[, i])
+				titlevector <-c(titlevector, paste("Starting", numberParametersStarting))
+				freevector<-c(freevector, TRUE)
+			}
+		}
+		for (i in 1:dim(intrinsicPriorsValues)[2]) {
+			priorFn<-match.arg(arg=intrinsicPriorsFns[i],choices=c("fixed", "uniform", "normal", "lognormal", "gamma", "exponential"),several.ok=FALSE)
+			if (priorFn=="fixed") {
+				numberParametersFree<-numberParametersFree-1
+				freevector<-c(freevector, FALSE)
+			}
+			else {
+				numberParametersIntrinsic<-numberParametersIntrinsic+1
+				freevariables<-cbind(freevariables, intrinsicPriorsValues[, i])
+				titlevector <-c(titlevector, paste("Intrinsic", numberParametersIntrinsic))
+				freevector<-c(freevector, TRUE)
+			}
+		}
+		for (i in 1:dim(extrinsicPriorsValues)[2]) {
+			priorFn<-match.arg(arg=extrinsicPriorsFns[i],choices=c("fixed", "uniform", "normal", "lognormal", "gamma", "exponential"),several.ok=FALSE)
+			if (priorFn=="fixed") {
+				numberParametersFree<-numberParametersFree-1
+				freevector<-c(freevector, FALSE)
+			}
+			else {
+				numberParametersExtrinsic<-numberParametersExtrinsic+1
+				freevariables<-cbind(freevariables, extrinsicPriorsValues[, i])
+				titlevector <-c(titlevector, paste("Extrinsic", numberParametersExtrinsic))
+				freevector<-c(freevector, TRUE)
+			}
+		}
+		
+		#initialize guesses, if needed
+			startingValuesGuess<-rep(NA,length(startingPriorsFns))
+			for (i in 1:length(startingPriorsFns)) {
+				startingValuesGuess[i]<-pullFromPrior(startingPriorsValues[,i],startingPriorsFns[i])
+			}
+			intrinsicValuesGuess<-rep(NA,length(intrinsicPriorsFns))
+			for (i in 1:length(intrinsicPriorsFns)) {
+				intrinsicValuesGuess[i]<-pullFromPrior(intrinsicPriorsValues[,i],intrinsicPriorsFns[i])
+			}
+			extrinsicValuesGuess<-rep(NA,length(extrinsicPriorsFns))
+			for (i in 1:length(extrinsicPriorsFns)) {
+				extrinsicValuesGuess[i]<-pullFromPrior(extrinsicPriorsValues[,i],extrinsicPriorsFns[i])
+			}
+		
+		
+			StartSims<-1000*numberParametersFree
+		
+		
+		#Figure out how many iterations to use for optimization in Geiger.
+		brown<-fitContinuous(phy=phy, dat=traits, model="BM", ncores=1, control=list(niter=100)) #it actually runs faster without checking for cores. And we parallelize elsewhere
+		lambda<-fitContinuous(phy=phy, dat=traits, model="lambda", ncores=1, control=list(niter=100))
+		delta<-fitContinuous(phy=phy, dat=traits, model="delta", ncores=1, control=list(niter=100))
+		ou<-fitContinuous(phy=phy, dat=traits, model="OU", ncores=1, control=list(niter=100))
+		white<-fitContinuous(phy=phy, dat=traits, model="white", ncores=1, control=list(niter=100))
+		trueStarting<-rep(NaN, dim(startingPriorsValues)[2])
+		trueIntrinsic<-rep(NaN, dim(intrinsicPriorsValues)[2])
+		trueExtrinsic<-rep(NaN, dim(extrinsicPriorsValues)[2])
+		for (j in 1:dim(startingPriorsValues)[2]) {
+			trueStarting[j]=pullFromPrior(startingPriorsValues[,j],startingPriorsFns[j])
+		}
+		for (j in 1:dim(intrinsicPriorsValues)[2]) {
+			trueIntrinsic[j]=pullFromPrior(intrinsicPriorsValues[,j],intrinsicPriorsFns[j])
+		}
+		for (j in 1:dim(extrinsicPriorsValues)[2]) {
+			trueExtrinsic[j]=pullFromPrior(extrinsicPriorsValues[,j],extrinsicPriorsFns[j])
+		}
+		trueInitial<-c(trueStarting, trueIntrinsic, trueExtrinsic)
+		trueFreeValues<-trueInitial[freevector]
+			simTraits<-doSimulationWithPossibleExtinction(taxon.df=taxon.df, intrinsicFn=intrinsicFn, extrinsicFn=extrinsicFn, startingValues=trueStarting, intrinsicValues=trueIntrinsic, extrinsicValues=trueExtrinsic, timeStep=timeStep, verbose=TRUE)
+
+}
+
+results <- doRun_prc(
+  phy = phy,
+  traits = trait,
+  intrinsicFn=intrinsicFn,
+  extrinsicFn=extrinsicFn,
+  startingPriorsFns=startingPriorsFns,
+  startingPriorsValues=startingPriorsValues,
+  intrinsicPriorsFns=intrinsicPriorsFns,
+  intrinsicPriorsValues=intrinsicPriorsValues,
+  extrinsicPriorsFns=extrinsicPriorsFns,
+  extrinsicPriorsValues=extrinsicPriorsValues,
+  TreeYears=TreeYears,
+  standardDevFactor=0.2,
+  plot=FALSE,
+  StartSims=100,
+  epsilonProportion=0.1,
+  epsilonMultiplier=0.7,
+  nStepsPRC=5,
+  numParticles=2000,
+  jobName='OrganEtAl',
+  stopRule=FALSE,
+  multicore=TRUE,
+  coreLimit=3
+)
+
+save(list=ls(), file="OrganEtAlResults.rda")
