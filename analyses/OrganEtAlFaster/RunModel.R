@@ -1,7 +1,7 @@
 library(TreEvo)
 
 options(warn=1)
-options(error = utils::recover)
+#options(error = utils::recover)
 source("/Users/bomeara/Documents/MyDocuments/GitClones/treevo_fossils/data/OrganEtAl/ProcessOrganData.R")
 
 
@@ -33,7 +33,7 @@ abcTolerance<-0.01
 phy$edge.length[which(phy$edge.length<0.01)] <- 0.01 
 
 #for debugging
-if(TRUE) {
+if(FALSE) {
 		traits <- trait
 				
 		timeStep<-generation.time/TreeYears
@@ -165,11 +165,11 @@ results <- doRun_prc(
   TreeYears=TreeYears,
   standardDevFactor=0.2,
   plot=FALSE,
-  StartSims=100,
+  StartSims=20,
   epsilonProportion=0.1,
   epsilonMultiplier=0.7,
   nStepsPRC=5,
-  numParticles=2000,
+  numParticles=5,
   jobName='OrganEtAl',
   stopRule=FALSE,
   multicore=TRUE,
