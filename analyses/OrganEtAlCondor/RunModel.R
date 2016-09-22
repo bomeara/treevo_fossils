@@ -29,7 +29,7 @@ extrinsicPriorsValues=matrix(c(0, 0), nrow=2, byrow=FALSE)
 
 abcTolerance<-0.01
 
-StartSims=5
+StartSims=25
 nrepSim<-StartSims
 multicore=FALSE
 checkpointFile=NULL
