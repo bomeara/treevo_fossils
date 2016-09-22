@@ -1,0 +1,239 @@
+
+R version 3.2.3 (2015-12-10) -- "Wooden Christmas-Tree"
+Copyright (C) 2015 The R Foundation for Statistical Computing
+Platform: x86_64-apple-darwin13.4.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> library(TreEvo)
+Loading required package: ape
+Warning messages:
+1: package ‘ape’ was built under R version 3.2.5 
+2: In rgl.init(initValue, onlyNULL) : RGL: unable to open X11 display
+3: 'rgl_init' failed, running with rgl.useNULL = TRUE 
+> library(geiger)
+> library(ape)
+> library(phytools)
+Loading required package: maps
+Warning messages:
+1: package ‘phytools’ was built under R version 3.2.5 
+2: package ‘maps’ was built under R version 3.2.5 
+> 
+> options(warn=1)
+> #options(error = utils::recover)
+> #source("/Users/bomeara/Documents/MyDocuments/GitClones/treevo_fossils/data/OrganEtAl/ProcessOrganData.R")
+> #traits <- trait
+> load("InputData.rda")
+> #assume generation time of 20 years. Tree is in MY time units.
+> TreeYears=1e6
+> generation.time=10000
+> #timeStep<-1000/TreeYears
+> timeStep<-generation.time/TreeYears
+> continuous.rate.guess <- geiger::fitContinuous(phy, traits)$opt$sigsq #units are variance / MY
+> sd.per.gen.guess <- sd(rnorm(1e5,0,sqrt(continuous.rate.guess*timeStep)))
+> 
+> trait <- traits
+> 
+> intrinsicFn=boundaryMinIntrinsic
+> extrinsicFn=nullExtrinsic
+> startingPriorsFns=c("uniform")
+> startingPriorsValues=matrix(range(trait),nrow=2,byrow=FALSE) #assume that the min value is the root state
+> intrinsicPriorsFns=c("exponential","uniform") 
+> intrinsicPriorsValues=matrix(c(
++   rep(1/sd.per.gen.guess , 2),
++   c(0, min(trait))), nrow=2, byrow=FALSE)
+> extrinsicPriorsFns=c("fixed")
+> extrinsicPriorsValues=matrix(c(0, 0), nrow=2, byrow=FALSE)
+> 
+> abcTolerance<-0.01
+> 
+> StartSims=50000
+> nrepSim<-StartSims
+> multicore=FALSE
+> checkpointFile=NULL
+> niter.goal=5
+> 
+> 
+> #dealing with zero length branches
+> phy$edge.length[which(phy$edge.length<0.01)] <- 0.01 
+> 
+> timeStep<-generation.time/TreeYears
+> 	#splits<-getSimulationSplits(phy) #initialize this info
+> 	taxon.df <- getTaxonDFWithPossibleExtinction(phy)
+> startingValuesGuess=c()
+>  intrinsicStatesGuess=c()
+> extrinsicStatesGuess=c()
+> 
+> 	#figure out number of free params
+> 	numberParametersTotal<-dim(startingPriorsValues)[2] +  dim(intrinsicPriorsValues)[2] + dim(extrinsicPriorsValues)[2]
+> 	numberParametersFree<-numberParametersTotal
+> 	numberParametersStarting<-0
+> 	numberParametersIntrinsic<-0
+> 	numberParametersExtrinsic<-0
+> 	freevariables<-matrix(data=NA, nrow=2, ncol=0)
+> 	titlevector<-c()
+> 	freevector<-c()
+> 
+> 	namesForPriorMatrix<-c()
+> 	PriorMatrix<-matrix(c(startingPriorsFns, intrinsicPriorsFns, extrinsicPriorsFns), nrow=1, ncol=numberParametersTotal)
+> 	for (a in 1:dim(startingPriorsValues)[2]) {
++ 		namesForPriorMatrix<-c(paste("StartingStates", a, sep=""))
++ 	}
+> 	for (b in 1:dim(intrinsicPriorsValues)[2]) {
++ 		namesForPriorMatrix<-append(namesForPriorMatrix, paste("IntrinsicValue", b, sep=""))
++ 	}
+> 	for (c in 1:dim(extrinsicPriorsValues)[2]) {
++ 		namesForPriorMatrix <-append(namesForPriorMatrix, paste("ExtrinsicValue", c, sep=""))
++ 	}
+> 	PriorMatrix<-rbind(PriorMatrix, cbind(startingPriorsValues, intrinsicPriorsValues, extrinsicPriorsValues))
+> 	colnames(PriorMatrix)<-namesForPriorMatrix
+> 	rownames(PriorMatrix)<-c("shape", "value1", "value2")
+> 
+> 	for (i in 1:dim(startingPriorsValues)[2]) {
++ 		priorFn<-match.arg(arg=startingPriorsFns[i],choices=c("fixed", "uniform", "normal", "lognormal", "gamma", "exponential"),several.ok=FALSE)
++ 		if (priorFn=="fixed") {
++ 			numberParametersFree<-numberParametersFree-1
++ 			freevector<-c(freevector, FALSE)
++ 		}
++ 		else {
++ 			numberParametersStarting<-numberParametersStarting+1
++ 			freevariables<-cbind(freevariables, startingPriorsValues[, i])
++ 			titlevector <-c(titlevector, paste("Starting", numberParametersStarting))
++ 			freevector<-c(freevector, TRUE)
++ 		}
++ 	}
+> 	for (i in 1:dim(intrinsicPriorsValues)[2]) {
++ 		priorFn<-match.arg(arg=intrinsicPriorsFns[i],choices=c("fixed", "uniform", "normal", "lognormal", "gamma", "exponential"),several.ok=FALSE)
++ 		if (priorFn=="fixed") {
++ 			numberParametersFree<-numberParametersFree-1
++ 			freevector<-c(freevector, FALSE)
++ 		}
++ 		else {
++ 			numberParametersIntrinsic<-numberParametersIntrinsic+1
++ 			freevariables<-cbind(freevariables, intrinsicPriorsValues[, i])
++ 			titlevector <-c(titlevector, paste("Intrinsic", numberParametersIntrinsic))
++ 			freevector<-c(freevector, TRUE)
++ 		}
++ 	}
+> 
+> 	for (i in 1:dim(extrinsicPriorsValues)[2]) {
++ 		priorFn<-match.arg(arg=extrinsicPriorsFns[i],choices=c("fixed", "uniform", "normal", "lognormal", "gamma", "exponential"),several.ok=FALSE)
++ 		if (priorFn=="fixed") {
++ 			numberParametersFree<-numberParametersFree-1
++ 			freevector<-c(freevector, FALSE)
++ 		}
++ 		else {
++ 			numberParametersExtrinsic<-numberParametersExtrinsic+1
++ 			freevariables<-cbind(freevariables, extrinsicPriorsValues[, i])
++ 			titlevector <-c(titlevector, paste("Extrinsic", numberParametersExtrinsic))
++ 			freevector<-c(freevector, TRUE)
++ 		}
++ 	}
+> 
+> 	#initialize guesses, if needed
+> 	if (length(startingValuesGuess)==0) { #if no user guesses, try pulling a value from the prior
++ 		startingValuesGuess<-rep(NA,length(startingPriorsFns))
++ 		for (i in 1:length(startingPriorsFns)) {
++ 			startingValuesGuess[i]<-pullFromPrior(startingPriorsValues[,i],startingPriorsFns[i])
++ 		}
++ 	}
+> 	if (length(intrinsicStatesGuess)==0) { #if no user guesses, try pulling a value from the prior
++ 		intrinsicStatesGuess<-rep(NA,length(intrinsicPriorsFns))
++ 		for (i in 1:length(intrinsicPriorsFns)) {
++ 			intrinsicStatesGuess[i]<-pullFromPrior(intrinsicPriorsValues[,i],intrinsicPriorsFns[i])
++ 		}
++ 	}
+> 	if (length(extrinsicStatesGuess)==0) { #if no user guesses, try pulling a value from the prior
++ 		extrinsicStatesGuess<-rep(NA,length(extrinsicPriorsFns))
++ 		for (i in 1:length(extrinsicPriorsFns)) {
++ 			extrinsicStatesGuess[i]<-pullFromPrior(extrinsicPriorsValues[,i],extrinsicPriorsFns[i])
++ 		}
++ 	}
+> 
+> 	brown<-fitContinuous(phy=phy, dat=traits, model="BM", ncores=1, control=list(niter=100)) #it actually runs faster without checking for cores. And we parallelize elsewhere
+> 	lambda<-fitContinuous(phy=phy, dat=traits, model="lambda", ncores=1, control=list(niter=100))
+> 	delta<-fitContinuous(phy=phy, dat=traits, model="delta", ncores=1, control=list(niter=100))
+> 	ou<-fitContinuous(phy=phy, dat=traits, model="OU", ncores=1, control=list(niter=100))
+Warning in fitContinuous(phy = phy, dat = traits, model = "OU", ncores = 1,  :
+  Non-ultrametric tree with OU model, using VCV method.
+> 	white<-fitContinuous(phy=phy, dat=traits, model="white", ncores=1, control=list(niter=100))
+> 
+> 	cat("Setting number of starting points for Geiger optimization to")
+Setting number of starting points for Geiger optimization to> 	niter.brown.g <- round(max(10, min(niter.goal/TreEvo:::solnfreq(brown),100)))
+> 	cat(paste("\n",niter.brown.g, "for Brownian motion"))
+
+ 10 for Brownian motion> 	niter.lambda.g <- round(max(10, min(niter.goal/TreEvo:::solnfreq(lambda),100)))
+> 	cat(paste("\n",niter.lambda.g, "for lambda"))
+
+ 25 for lambda> 	niter.delta.g <- round(max(10, min(niter.goal/TreEvo:::solnfreq(delta),100)))
+> 	cat(paste("\n",niter.delta.g, "for delta"))
+
+ 42 for delta> 	niter.OU.g <- round(max(10, min(niter.goal/TreEvo:::solnfreq(ou),100)))
+> 	cat(paste("\n",niter.OU.g, "for OU"))
+
+ 22 for OU> 	niter.white.g <- round(max(10, min(niter.goal/TreEvo:::solnfreq(white),100)))
+> 	cat(paste("\n",niter.white.g, "for white noise"))
+
+ 10 for white noise> 
+> 	trueFreeValuesANDSummaryValues<-parallelSimulation(nrepSim, coreLimit, taxon.df, phy, startingPriorsValues, intrinsicPriorsValues, extrinsicPriorsValues, startingPriorsFns, intrinsicPriorsFns, extrinsicPriorsFns, freevector, timeStep, intrinsicFn, extrinsicFn, multicore, checkpointFile="CheckPoint", checkpointFreq=1, niter.brown=niter.brown.g, niter.lambda=niter.lambda.g, niter.delta=niter.delta.g, niter.OU=niter.OU.g, niter.white=niter.white.g)
+Using 1 core(s) for simulations 
+
+Doing simulations: Warning: executing %dopar% sequentially: no parallel backend registered
+.Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996
+Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996 we would suggest at least 0.00333333333333267
+Warning in fitContinuous(phy = phy, dat = traits, model = "lambda", ncores = 1,  :
+  Parameter estimates appear at bounds:
+	lambda
+Warning in fitContinuous(phy = phy, dat = traits, model = "OU", ncores = 1,  :
+  Non-ultrametric tree with OU model, using VCV method.
+Warning in sqrt(1/out$hessian) : NaNs produced
+[1] "Just finished 1 of 50000 simulations; progress so far saved in CheckPoint.trueFreeValuesANDSummaryValues.Rsave"
+.Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996
+Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996 we would suggest at least 0.00333333333333267
+Warning in fitContinuous(phy = phy, dat = traits, model = "lambda", ncores = 1,  :
+  Parameter estimates appear at bounds:
+	lambda
+Warning in fitContinuous(phy = phy, dat = traits, model = "OU", ncores = 1,  :
+  Non-ultrametric tree with OU model, using VCV method.
+[1] "Just finished 2 of 50000 simulations; progress so far saved in CheckPoint.trueFreeValuesANDSummaryValues.Rsave"
+.Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996
+Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996 we would suggest at least 0.00333333333333267
+Warning in fitContinuous(phy = phy, dat = traits, model = "OU", ncores = 1,  :
+  Non-ultrametric tree with OU model, using VCV method.
+[1] "Just finished 3 of 50000 simulations; progress so far saved in CheckPoint.trueFreeValuesANDSummaryValues.Rsave"
+.Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996
+Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996 we would suggest at least 0.00333333333333267
+Warning in fitContinuous(phy = phy, dat = traits, model = "OU", ncores = 1,  :
+  Non-ultrametric tree with OU model, using VCV method.
+[1] "Just finished 4 of 50000 simulations; progress so far saved in CheckPoint.trueFreeValuesANDSummaryValues.Rsave"
+.Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996
+Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996 we would suggest at least 0.00333333333333267
+Warning in fitContinuous(phy = phy, dat = traits, model = "OU", ncores = 1,  :
+  Non-ultrametric tree with OU model, using VCV method.
+[1] "Just finished 5 of 50000 simulations; progress so far saved in CheckPoint.trueFreeValuesANDSummaryValues.Rsave"
+.Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996
+Warning in doSimulationWithPossibleExtinction(taxon.df = taxon.df, intrinsicFn = intrinsicFn,  :
+  You have only  0  on the shortest interval but should probably have a lot more if you expect change on this branch. I would suggest decreasing timeStep to no more than  0.00019999999999996 we would suggest at least 0.00333333333333267
