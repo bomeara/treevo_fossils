@@ -176,8 +176,8 @@ extrinsicStatesGuess=c()
 save(rejectionResults, file="RejectionResults.rda")
 #plotPosteriors(rejectionResults$particleDataFrame, rejectionResults$PriorMatrix)
 param.names <- c("Root state", "Rate of evolution", "Minimum")
-par(mfcol=c(1,3))
 pdf(file="OrganEmpiricalResults.pdf", width=15, height=4)
+par(mfcol=c(1,3))
 for (i in sequence(3)) {
 	all.vals <- trueFreeValuesMatrix[,i]
 	best.vals <- trueFreeValuesMatrix[which(rejectionResults$abcDistances < quantile(rejectionResults$abcDistances, abcTolerance)),i]
@@ -188,3 +188,4 @@ for (i in sequence(3)) {
 dev.off()
 
 best.vals <- trueFreeValuesMatrix[which.min(rejectionResults$abcDistances),]
+
