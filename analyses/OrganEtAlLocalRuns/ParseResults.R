@@ -59,7 +59,7 @@ extrinsicStatesGuess=c()
 	freevector<-c()
 
 	namesForPriorMatrix<-c()
-	PriorMatrix<-matrix(c(startingPriorsFns, intrinsicPriorsFns, extrinsicPriorsFns), nrow=1, ncol=numberParametersTotal)
+	PriorMatrix <-matrix(c(startingPriorsFns, intrinsicPriorsFns, extrinsicPriorsFns), nrow=1, ncol=numberParametersTotal)
 	for (a in 1:dim(startingPriorsValues)[2]) {
 		namesForPriorMatrix<-c(paste("StartingStates", a, sep=""))
 	}
@@ -176,7 +176,7 @@ extrinsicStatesGuess=c()
 save(rejectionResults, file="RejectionResults.rda")
 #plotPosteriors(rejectionResults$particleDataFrame, rejectionResults$PriorMatrix)
 param.names <- c("Root state (pg of DNA)", "Rate of evolution (ln(pg)^2 / MY)", "Minimum (pg of DNA)")
-pdf(file="OrganEmpiricalResults.pdf", width=15, height=4)
+pdf(file="OrganEmpiricalResults2.pdf", width=15, height=4)
 for (i in sequence(3)) {
 	all.vals <- trueFreeValuesMatrix[,i]
 	best.vals <- trueFreeValuesMatrix[which(rejectionResults$abcDistances < quantile(rejectionResults$abcDistances, abcTolerance)),i]
@@ -185,26 +185,32 @@ for (i in sequence(3)) {
 		best.vals <- exp(best.vals)
 	}
 	posteriorCurve=getUnivariatePosteriorCurve(best.vals, from=min(all.vals), to=max(all.vals))
-	priorCurve=getUnivariatePosteriorCurve(all.vals, from=min(all.vals), to=max(all.vals))
+#	priorCurve=getUnivariatePosteriorCurve(all.vals, from=min(all.vals), to=max(all.vals))
+	priorCurve = getUnivariatePriorCurve(priorValues=cbind(startingPriorsValues, intrinsicPriorsValues)[,i], priorFn=c(startingPriorsFns, intrinsicPriorsFns)[i])
+	if(i!=2) {
+		priorCurve$x <- exp(priorCurve$x)	
+	}
+
 	plotUnivariatePosteriorVsPrior(posteriorCurve, priorCurve, label=param.names[i])
 }
 dev.off()
 
 param.names <- c("Root state (ln(pg) of DNA)", "Rate of evolution (ln(pg)^2 / MY)", "Minimum (ln(pg) of DNA)")
-pdf(file="OrganEmpiricalResultsNonLog.pdf", width=15, height=4)
+pdf(file="OrganEmpiricalResultsNonLog2.pdf", width=15, height=4)
 for (i in sequence(3)) {
 	all.vals <- trueFreeValuesMatrix[,i]
 	best.vals <- trueFreeValuesMatrix[which(rejectionResults$abcDistances < quantile(rejectionResults$abcDistances, abcTolerance)),i]
 	#maybe do prior curve instead
 	posteriorCurve=getUnivariatePosteriorCurve(best.vals, from=min(all.vals), to=max(all.vals))
-	priorCurve=getUnivariatePosteriorCurve(all.vals, from=min(all.vals), to=max(all.vals))
+	#priorCurve=getUnivariatePosteriorCurve(all.vals, from=min(all.vals), to=max(all.vals))
+	priorCurve = getUnivariatePriorCurve(priorValues=cbind(startingPriorsValues, intrinsicPriorsValues)[,i], priorFn=c(startingPriorsFns, intrinsicPriorsFns)[i])
 	plotUnivariatePosteriorVsPrior(posteriorCurve, priorCurve, label=param.names[i])
 }
 dev.off()
 
-traits.df <- data.frame(exp(trait))
-colnames(traits.df) <- "Genome size (pg)"
-ggplot(data=traits.df) + geom_bar(stat="identity")
+#traits.df <- data.frame(exp(trait))
+#colnames(traits.df) <- "Genome size (pg)"
+#ggplot(data=traits.df) + geom_bar(stat="identity")
 
 
 pdf(file="OrganEtAlTree.pdf", width=10, height=7)
