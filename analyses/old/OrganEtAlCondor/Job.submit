@@ -1,0 +1,9 @@
+executable=RunSim.batch
+universe=vanilla
+transfer_input_files=RunModel.R,InputData.rda,RunSim.batch
+notification=never
+should_transfer_files=YES
+when_to_transfer_output=ON_EXIT
+initialdir = run$(Process)
+queue 500
+

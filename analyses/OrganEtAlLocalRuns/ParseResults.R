@@ -175,17 +175,39 @@ extrinsicStatesGuess=c()
 	rejectionResults$HPD<-HPD(res$particleDataFrame)
 save(rejectionResults, file="RejectionResults.rda")
 #plotPosteriors(rejectionResults$particleDataFrame, rejectionResults$PriorMatrix)
-param.names <- c("Root state", "Rate of evolution", "Minimum")
+param.names <- c("Root state (pg of DNA)", "Rate of evolution (ln(pg)^2 / MY)", "Minimum (pg of DNA)")
 pdf(file="OrganEmpiricalResults.pdf", width=15, height=4)
-par(mfcol=c(1,3))
 for (i in sequence(3)) {
 	all.vals <- trueFreeValuesMatrix[,i]
 	best.vals <- trueFreeValuesMatrix[which(rejectionResults$abcDistances < quantile(rejectionResults$abcDistances, abcTolerance)),i]
-	posteriorCurve=getUnivariatePosteriorCurve(best.vals,from=min(all.vals),to=max(all.vals))
-	priorCurve=getUnivariatePosteriorCurve(all.vals,from=min(all.vals),to=max(all.vals))
+	if(i!=2) {
+		all.vals <- exp(all.vals) 	
+		best.vals <- exp(best.vals)
+	}
+	posteriorCurve=getUnivariatePosteriorCurve(best.vals, from=min(all.vals), to=max(all.vals))
+	priorCurve=getUnivariatePosteriorCurve(all.vals, from=min(all.vals), to=max(all.vals))
 	plotUnivariatePosteriorVsPrior(posteriorCurve, priorCurve, label=param.names[i])
 }
 dev.off()
 
-best.vals <- trueFreeValuesMatrix[which.min(rejectionResults$abcDistances),]
+param.names <- c("Root state (ln(pg) of DNA)", "Rate of evolution (ln(pg)^2 / MY)", "Minimum (ln(pg) of DNA)")
+pdf(file="OrganEmpiricalResultsNonLog.pdf", width=15, height=4)
+for (i in sequence(3)) {
+	all.vals <- trueFreeValuesMatrix[,i]
+	best.vals <- trueFreeValuesMatrix[which(rejectionResults$abcDistances < quantile(rejectionResults$abcDistances, abcTolerance)),i]
+	#maybe do prior curve instead
+	posteriorCurve=getUnivariatePosteriorCurve(best.vals, from=min(all.vals), to=max(all.vals))
+	priorCurve=getUnivariatePosteriorCurve(all.vals, from=min(all.vals), to=max(all.vals))
+	plotUnivariatePosteriorVsPrior(posteriorCurve, priorCurve, label=param.names[i])
+}
+dev.off()
 
+traits.df <- data.frame(exp(trait))
+colnames(traits.df) <- "Genome size (pg)"
+ggplot(data=traits.df) + geom_bar(stat="identity")
+
+
+pdf(file="OrganEtAlTree.pdf", width=10, height=7)
+plot(contMap(phy, exp(trait)))
+dev.off()
+system("open *.pdf")
